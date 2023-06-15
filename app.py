@@ -1,15 +1,22 @@
 from flask import Flask, jsonify, request
-import os
+import json
+from datetime import datetime
+import pytz
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, auth
 import tensorflow as tf
-import tensorflow.lite as tflite
 import numpy as np
+import tensorflow.lite as tflite
 app = Flask(__name__)
 
-cred = credentials.Certificate("/serviceAccount.json")
+cred = credentials.Certificate("serviceAccount.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
+data = {
+    'Periode': 0,  # Ganti dengan nilai minimum dari data Anda
+    'Luas Panen (Ha)': 0,  # Ganti dengan nilai minimum dari data Anda
+    'Produksi Padi (Ton-GKG)': 0  # Ganti dengan nilai minimum dari data Anda
+}
 
 # Endpoint untuk mendapatkan semua tasks
 @app.route('/api/historyprediction', methods=['GET'])
@@ -24,12 +31,13 @@ def get_history():
     return jsonify({'data': data})
 
 # Endpoint untuk mendapatkan task berdasarkan ID
-model = tflite.Interpreter(model_path='/model_produksipadi.tflite')
+model = tflite.Interpreter(model_path='model_produksipadi.tflite')
 @app.route('/api/predict', methods=['POST'])
 def get_predict():
-    email = request.form[email]
-    luas_panen = request.form[luas_panen]
-    periode_tanam = request.form[periode_tanam]
+    email = request.form['email']
+    periode_tanam = float(request.form['periode_tanam'])
+    luas_panen = float(request.form['luas_panen'])
+
 
     try: 
         user = auth.get_user_by_email(email)
@@ -40,7 +48,7 @@ def get_predict():
             scaled_luas_panen = (luas_panen - data['Luas Panen (Ha)'].min()) / (data['Luas Panen (Ha)'].max() - data['Luas Panen (Ha)'].min())
             input_data = np.array([[scaled_period, scaled_luas_panen]])
             return input_data
-        input_data = prepare_input_data(periode_tanam, luas_panen)     
+        input_data = prepare_input_data(float(periode_tanam), float(luas_panen))
         y_pred = model.predict(input_data)
         predicted_output = (y_pred * (data['Produksi Padi (Ton-GKG)'].max() - data['Produksi Padi (Ton-GKG)'].min())) + data['Produksi Padi (Ton-GKG)'].min()
        
