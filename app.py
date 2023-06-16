@@ -1,3 +1,4 @@
+import os 
 from flask import Flask, jsonify, request
 import json
 from datetime import datetime
@@ -123,6 +124,9 @@ def get_predict():
         error_message = {'error': str(e)}
         return json.dumps(error_message), 500
 
+if __name__ == "__main__":
+    app.run(debug=False,
+            host="0.0.0.0",
+            port=int(os.environ.get("PORT", 8080)))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+ 
