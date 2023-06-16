@@ -1,17 +1,12 @@
-FROM python:3.10.3-slim-buster
+FROM python:3.10-slim
 
-WORKDIR /workspace
+ENV PYTHONBUFFERED True
 
-COPY requirements.txt requirements.txt
+ENV APP_HOME /app
+WORKDIR $APP_HOME
+
+COPY . ./
 
 RUN pip install -r requirements.txt
 
-COPY . .
-
-ENV PYTHONUNBUFFERED=1
-
-ENV HOST 0.0.0.0
-
-EXPOSE 8080
-
-CMD ["python", "app.py"]
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app:app
