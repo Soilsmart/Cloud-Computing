@@ -21,14 +21,48 @@ data = {
 # Endpoint untuk mendapatkan semua tasks
 @app.route('/api/historyprediction', methods=['GET'])
 def get_history():
-    data = []
-    collection_ref = db.collection('history_lahan')  # Ganti dengan nama koleksi Anda
+    try:
+        email = request.args.get('email')
 
-    docs = collection_ref.get()
-    for doc in docs:
-        data.append(doc.to_dict())
+        if not email:
+            return json.dumps({'error': 'Email must be included in the query parameters!'}), 400
 
-    return jsonify({'data': data})
+        user = auth.get_user_by_email(email)
+        uid = user.uid
+
+        try:
+          query = db.collection('histori_panen').where(
+              'uid', '==', uid).get()
+          data_history = []
+
+          for doc in query:
+              data = doc.to_dict()
+              data_history.append(data)
+
+          response = {'code': 200, 'data': data_history}
+          response_json = json.dumps(response)
+          return response_json, 200
+        except Exception as e:
+          error_message = {'error': str(e)}
+          return json.dumps(error_message), 500
+        # return get_data_firestore_by_id(uid)
+
+    except auth.InvalidIdTokenError as e:
+        error_message = {'error': str(e)}
+        return json.dumps(error_message), 401
+
+    except Exception as e:
+        error_message = {'error': str(e)}
+        return json.dumps(error_message), 500
+
+    # data = []
+    # collection_ref = db.collection('history_lahan')  # Ganti dengan nama koleksi Anda
+
+    # docs = collection_ref.get()
+    # for doc in docs:
+    #     data.append(doc.to_dict())
+
+    # return jsonify({'data': data})
 
 # Endpoint untuk mendapatkan task berdasarkan ID
 model = tflite.Interpreter(model_path='model_produksipadi.tflite')
@@ -73,6 +107,8 @@ def get_predict():
             except Exception as e:
                 error_message = {'error': str(e)}
                 return json.dumps(error_message), 500
+        save_history_to_firestore = save_history_to_firestore(uid, periode_tanam, luas_panen, predicted_output)
+        return jsonify({'message': "Prediksi berhasil", 'hasil_prediksi': predicted_output})
     except Exception as e:
         error_message = {'error': str(e)}
         return json.dumps(error_message), 500
