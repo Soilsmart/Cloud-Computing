@@ -71,7 +71,8 @@ signature = model.get_signature_runner()
 @app.route('/api/predict', methods=['POST'])
 def get_predict():
     email = request.form['email']
-    periode_tanam = float(request.form['periode_tanam'])
+    periode_tanam = request.form['periode_tanam']
+    periode_tanam = datetime.timestamp(datetime.strptime(periode_tanam,'%Y-%m-%d'))
     luas_panen = float(request.form['luas_panen'])
 
 
@@ -84,17 +85,18 @@ def get_predict():
             scaled_luas_panen = (luas_panen - data['Luas Panen (Ha)'].min()) / (data['Luas Panen (Ha)'].max() - data['Luas Panen (Ha)'].min())
             input_data = np.array([[scaled_period, scaled_luas_panen]],dtype=np.float32)
             return input_data
-        # input_data = prepare_input_data(float(periode_tanam), float(luas_panen))
-        # input_data = np.expand_dims(input_data,0)
-        # print(input_data.shape)
+        input_data = prepare_input_data(float(periode_tanam), float(luas_panen))
+        input_data = np.expand_dims(input_data,-1)
+        print(input_data.shape)
         # y_pred = signature(lstm_3_input= input_data)
-        data = np.random.uniform(size=(1,2)).astype(np.float32)
-        data = np.expand_dims(data, 0)
-        output = signature(lstm_3_input=data)
+        #data = np.random.uniform(size=(1,2)).astype(np.float32)
+        #data = np.expand_dims(data, 0)
+        output = signature(lstm_3_input=input_data)['dense_5']
         print(output)
-        predicted_output = (y_pred * (data['Produksi Padi (Ton-GKG)'].max() - data['Produksi Padi (Ton-GKG)'].min())) + data['Produksi Padi (Ton-GKG)'].min()
+        predicted_output = (output * (data['Produksi Padi (Ton-GKG)'].max() - data['Produksi Padi (Ton-GKG)'].min())) + data['Produksi Padi (Ton-GKG)'].min()
         predicted_output_float = float(predicted_output[0])
         predicted_output_round = round(predicted_output_float,2)
+        print(predicted_output_round)
 
         def save_history_to_firestore(uid, periode_tanam, luas_panen, predicted_output_round):
             try:
@@ -118,7 +120,7 @@ def get_predict():
                 error_message = {'error': str(e)}
                 return json.dumps(error_message), 500
         save_history_to_firestore = save_history_to_firestore(uid, periode_tanam, luas_panen, predicted_output)
-        return jsonify({'message': "Prediksi berhasil", 'hasil_prediksi': predicted_output})
+        return jsonify({'message': "Prediksi berhasil", 'hasil_prediksi': predicted_output_round})
     except Exception as e:
         traceback.print_exc()
         error_message = {'error': str(e)}
