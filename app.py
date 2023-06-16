@@ -7,16 +7,16 @@ from firebase_admin import credentials, firestore, auth
 import tensorflow as tf
 import numpy as np
 import tensorflow.lite as tflite
+import pandas as pd
+from datetime import datetime
+import traceback
 app = Flask(__name__)
 
 cred = credentials.Certificate("serviceAccount.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
-data = {
-    'Periode': 0,  # Ganti dengan nilai minimum dari data Anda
-    'Luas Panen (Ha)': 0,  # Ganti dengan nilai minimum dari data Anda
-    'Produksi Padi (Ton-GKG)': 0  # Ganti dengan nilai minimum dari data Anda
-}
+data = pd.read_csv('Dataset-hasil-panen-padi-2018-2021(1).csv')
+data['Periode']=data['Periode'].map(lambda x:datetime.timestamp(datetime.strptime(x,'%Y-%m-%d')))
 
 # Endpoint untuk mendapatkan semua tasks
 @app.route('/api/historyprediction', methods=['GET'])
@@ -65,7 +65,8 @@ def get_history():
     # return jsonify({'data': data})
 
 # Endpoint untuk mendapatkan task berdasarkan ID
-model = tflite.Interpreter(model_path='model_produksipadi.tflite')
+model = tf.lite.Interpreter('model_produksipadi(1).tflite')
+signature = model.get_signature_runner()
 @app.route('/api/predict', methods=['POST'])
 def get_predict():
     email = request.form['email']
@@ -80,13 +81,21 @@ def get_predict():
         def prepare_input_data(periode_tanam, luas_panen):
             scaled_period = (periode_tanam - data['Periode'].min()) / (data['Periode'].max() - data['Periode'].min())
             scaled_luas_panen = (luas_panen - data['Luas Panen (Ha)'].min()) / (data['Luas Panen (Ha)'].max() - data['Luas Panen (Ha)'].min())
-            input_data = np.array([[scaled_period, scaled_luas_panen]])
+            input_data = np.array([[scaled_period, scaled_luas_panen]],dtype=np.float32)
             return input_data
-        input_data = prepare_input_data(float(periode_tanam), float(luas_panen))
-        y_pred = model.predict(input_data)
+        # input_data = prepare_input_data(float(periode_tanam), float(luas_panen))
+        # input_data = np.expand_dims(input_data,0)
+        # print(input_data.shape)
+        # y_pred = signature(lstm_3_input= input_data)
+        data = np.random.uniform(size=(1,2)).astype(np.float32)
+        data = np.expand_dims(data, 0)
+        output = signature(lstm_3_input=data)
+        print(output)
         predicted_output = (y_pred * (data['Produksi Padi (Ton-GKG)'].max() - data['Produksi Padi (Ton-GKG)'].min())) + data['Produksi Padi (Ton-GKG)'].min()
-       
-        def save_history_to_firestore(uid, periode_tanam, luas_panen, predicted_output):
+        predicted_output_float = float(predicted_output[0])
+        predicted_output_round = round(predicted_output_float,2)
+
+        def save_history_to_firestore(uid, periode_tanam, luas_panen, predicted_output_round):
             try:
                 server_time = datetime.now()
                 user_timezone = pytz.timezone('Asia/Jakarta')
@@ -110,8 +119,10 @@ def get_predict():
         save_history_to_firestore = save_history_to_firestore(uid, periode_tanam, luas_panen, predicted_output)
         return jsonify({'message': "Prediksi berhasil", 'hasil_prediksi': predicted_output})
     except Exception as e:
+        traceback.print_exc()
         error_message = {'error': str(e)}
         return json.dumps(error_message), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
